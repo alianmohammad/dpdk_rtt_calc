@@ -49,7 +49,7 @@ APP = kni
 # all source are stored in SRCS-y
 SRCS-y := main.c
 
-CFLAGS += -O3
+CFLAGS += -O3 -w
 CFLAGS += $(WERROR_FLAGS)
 
 include $(RTE_SDK)/mk/rte.extapp.mk

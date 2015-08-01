@@ -235,6 +235,47 @@ kni_burst_free_mbufs(struct rte_mbuf **pkts, unsigned num)
 	}
 }
 
+static struct {
+        uint64_t total_cycles;
+        uint64_t total_pkts;
+} latency_numbers;
+
+static uint16_t
+add_timestamps(uint8_t port __rte_unused, uint16_t qidx __rte_unused,
+                struct rte_mbuf **pkts, uint16_t nb_pkts,
+                uint16_t max_pkts __rte_unused, void *_ __rte_unused)
+{
+        unsigned i;
+        uint64_t now = rte_rdtsc();
+
+        for (i = 0; i < nb_pkts; i++) {
+                *(uint64_t *)((char *)(rte_ctrlmbuf_data(pkts[i])) +
+                              rte_ctrlmbuf_len(pkts[i]) - 8) = now;
+        }
+        return nb_pkts;
+}
+
+static uint16_t
+calc_latency(uint8_t port __rte_unused, uint16_t qidx __rte_unused,
+                struct rte_mbuf **pkts, uint16_t nb_pkts, void *_ __rte_unused)
+{
+        uint64_t cycles = 0;
+        uint64_t time_stamp = 0;
+        uint64_t now = rte_rdtsc();
+        unsigned i;
+
+        for (i = 0; i < nb_pkts; i++) {
+                time_stamp = *(uint64_t *)((char *)(rte_ctrlmbuf_data(pkts[i]))
+                                           + rte_ctrlmbuf_len(pkts[i]) - 8);
+                cycles += now - time_stamp;
+                printf("rtt= %lu\n", now - time_stamp);
+        }
+        latency_numbers.total_cycles += cycles;
+        latency_numbers.total_pkts += nb_pkts;
+
+        return nb_pkts;
+}
+
 /**
  * Interface to burst rx and enqueue mbufs into rx_q
  */
@@ -637,6 +678,8 @@ init_port(uint8_t port)
 
 	if (promiscuous_on)
 		rte_eth_promiscuous_enable(port);
+        rte_eth_add_tx_callback(port, 0, add_timestamps, NULL);
+        rte_eth_add_rx_callback(port, 0, calc_latency, NULL);
 }
 
 /* Check the link status of all ports in up to 9s, and print them finally */
